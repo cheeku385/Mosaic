@@ -1,0 +1,6 @@
+{
+  "name": "Mosaic",
+  "description": "Decentralized document and PDF backups built on Shelby Protocol on Aptos",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
