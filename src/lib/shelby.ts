@@ -32,9 +32,21 @@ export function createShelbyTransactionPayload(
   fileSize: number,
   blobId: string
 ) {
+  // Aptos Wallet Adapter v2 / Petra format
   return {
+    payload: {
+      function: "0x1::shelby_vault::backup_blob",
+      typeArguments: [],
+      functionArguments: [
+        fileName,
+        fileHash,
+        fileSize.toString(),
+        blobId
+      ]
+    },
+    // Fallback legacy structure for raw wallet adapter compatibility
     type: "entry_function_payload",
-    function: "0x1::shelby_vault::backup_blob", // Shelby Protocol on Aptos
+    function: "0x1::shelby_vault::backup_blob",
     type_arguments: [],
     arguments: [
       Array.from(new TextEncoder().encode(fileName)),

@@ -108,9 +108,10 @@ function MainAppContent() {
         />
       )}
 
-      {currentPage === 'dashboard' && (
+      {(currentPage === 'dashboard' || currentPage === 'all-files' || currentPage === 'vaults' || currentPage === 'settings') && (
         <DashboardPage
           files={files}
+          activeTab={currentPage}
           onNavigate={(page) => setCurrentPage(page)}
           onDownloadFile={handleDownloadFile}
           onOpenUpload={() => setCurrentPage('upload')}

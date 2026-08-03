@@ -90,34 +90,67 @@ export const UploadPage: React.FC<UploadPageProps> = ({
     setError(null);
 
     try {
+      // Auto-connect Petra wallet if not connected
+      if (!connected) {
+        setStageText('Connecting Petra Wallet...');
+        try {
+          await connect('Petra');
+        } catch (connErr) {
+          console.warn("Wallet connect request:", connErr);
+        }
+      }
+
       // Step 1: Encrypt file & construct Shelby Protocol Blob
       const result = await backupToShelbyProtocol(selectedFile, (progress, stage) => {
         setUploadProgress(progress);
         setStageText(stage);
       });
 
-      // Step 2: Trigger real Aptos Petra wallet transaction if connected
+      // Step 2: Trigger real Aptos Petra wallet transaction request
       let finalTxHash = result.transactionHash;
 
-      if (connected) {
-        try {
-          const payload = createShelbyTransactionPayload(
-            selectedFile.name,
-            result.fileHash,
-            selectedFile.size,
-            result.blobId
-          );
+      setStageText('Awaiting Petra Wallet transaction signature...');
+      
+      const payload = createShelbyTransactionPayload(
+        selectedFile.name,
+        result.fileHash,
+        selectedFile.size,
+        result.blobId
+      );
 
-          setStageText('Awaiting Petra Wallet transaction signature...');
-          
-          // Call real Petra signAndSubmitTransaction
-          const txRes = await signAndSubmitTransaction(payload as any);
-          if (txRes && txRes.hash) {
-            finalTxHash = txRes.hash;
+      let txRes: any = null;
+      let petraError: any = null;
+
+      try {
+        if (signAndSubmitTransaction) {
+          // Attempt using Aptos Wallet Adapter
+          txRes = await signAndSubmitTransaction(payload as any);
+        } else if ((window as any).aptos?.signAndSubmitTransaction) {
+          txRes = await (window as any).aptos.signAndSubmitTransaction(payload);
+        } else if ((window as any).petra?.signAndSubmitTransaction) {
+          txRes = await (window as any).petra.signAndSubmitTransaction(payload);
+        }
+      } catch (err: any) {
+        petraError = err;
+        console.warn("Petra wallet transaction attempt:", err);
+        // Fallback to window object direct call if wallet adapter wrapper failed
+        try {
+          if ((window as any).aptos?.signAndSubmitTransaction) {
+            txRes = await (window as any).aptos.signAndSubmitTransaction(payload);
+          } else if ((window as any).petra?.signAndSubmitTransaction) {
+            txRes = await (window as any).petra.signAndSubmitTransaction(payload);
           }
-        } catch (petraErr: any) {
-          console.warn("Petra transaction response:", petraErr);
-          // If transaction call finishes or fallback on testnet, log proof transaction hash
+        } catch (rawErr: any) {
+          petraError = rawErr;
+        }
+      }
+
+      if (txRes && (txRes.hash || txRes.transactionHash)) {
+        finalTxHash = txRes.hash || txRes.transactionHash;
+      } else if (petraError) {
+        // If user explicitly rejected or if Petra wallet threw error, handle gracefully
+        if (petraError?.message?.includes('User rejected') || petraError?.code === 4001) {
+          throw new Error("Transaction signature was rejected in Petra Wallet.");
         }
       }
 
@@ -154,7 +187,7 @@ export const UploadPage: React.FC<UploadPageProps> = ({
 
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || "Failed to back up to Shelby Network.");
+      setError(err?.message || "Failed to complete transaction on Shelby Network.");
     } finally {
       setIsUploading(false);
     }
@@ -175,15 +208,23 @@ export const UploadPage: React.FC<UploadPageProps> = ({
         <nav className="flex-1 space-y-2">
           <button
             onClick={() => onNavigate('dashboard')}
-            className="flex items-center gap-3 px-4 py-2.5 w-full text-[#D9C2B5] hover:bg-[#3A260F] rounded-lg transition-all"
+            className="flex items-center gap-3 px-4 py-2.5 w-full text-[#D9C2B5] hover:bg-[#3A260F] hover:text-[#FDFBD4] rounded-lg transition-all"
           >
             <LayoutDashboard className="w-4 h-4 text-[#D9C2B5]" />
             <span className="text-sm font-semibold">Dashboard</span>
           </button>
 
           <button
-            onClick={() => onNavigate('dashboard')}
-            className="flex items-center gap-3 px-4 py-2.5 w-full text-[#D9C2B5] hover:bg-[#3A260F] rounded-lg transition-all"
+            onClick={() => onNavigate('all-files')}
+            className="flex items-center gap-3 px-4 py-2.5 w-full text-[#D9C2B5] hover:bg-[#3A260F] hover:text-[#FDFBD4] rounded-lg transition-all"
+          >
+            <FileText className="w-4 h-4 text-[#D9C2B5]" />
+            <span className="text-sm font-semibold">All Files</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate('vaults')}
+            className="flex items-center gap-3 px-4 py-2.5 w-full text-[#D9C2B5] hover:bg-[#3A260F] hover:text-[#FDFBD4] rounded-lg transition-all"
           >
             <Lock className="w-4 h-4 text-[#D9C2B5]" />
             <span className="text-sm font-semibold">My Vault</span>
@@ -197,8 +238,8 @@ export const UploadPage: React.FC<UploadPageProps> = ({
           </button>
 
           <button
-            onClick={() => onNavigate('dashboard')}
-            className="flex items-center gap-3 px-4 py-2.5 w-full text-[#D9C2B5] hover:bg-[#3A260F] rounded-lg transition-all"
+            onClick={() => onNavigate('settings')}
+            className="flex items-center gap-3 px-4 py-2.5 w-full text-[#D9C2B5] hover:bg-[#3A260F] hover:text-[#FDFBD4] rounded-lg transition-all"
           >
             <Settings className="w-4 h-4 text-[#D9C2B5]" />
             <span className="text-sm font-semibold">Settings</span>
