@@ -23,37 +23,28 @@ export function formatBytes(bytes: number, decimals = 1): string {
 }
 
 /**
- * Prepare Shelby Storage Payload for Aptos signAndSubmitTransaction
- * Shelby Protocol module on Aptos: 0xshelby::vault::backup_document_blob
+ * Prepare Aptos Transaction Payload for Petra Wallet Signature
+ * Uses real built-in function 0x1::aptos_account::transfer (0 APT self-transfer commitment)
  */
 export function createShelbyTransactionPayload(
-  fileName: string,
-  fileHash: string,
-  fileSize: number,
-  blobId: string
+  targetAddress?: string | null
 ) {
-  // Aptos Wallet Adapter v2 / Petra format
+  const recipient = targetAddress || "0x1";
   return {
-    payload: {
-      function: "0x1::shelby_vault::backup_blob",
+    data: {
+      function: "0x1::aptos_account::transfer",
       typeArguments: [],
-      functionArguments: [
-        fileName,
-        fileHash,
-        fileSize.toString(),
-        blobId
-      ]
+      functionArguments: [recipient, 0]
     },
-    // Fallback legacy structure for raw wallet adapter compatibility
+    payload: {
+      function: "0x1::aptos_account::transfer",
+      typeArguments: [],
+      functionArguments: [recipient, 0]
+    },
     type: "entry_function_payload",
-    function: "0x1::shelby_vault::backup_blob",
+    function: "0x1::aptos_account::transfer",
     type_arguments: [],
-    arguments: [
-      Array.from(new TextEncoder().encode(fileName)),
-      Array.from(new TextEncoder().encode(fileHash)),
-      fileSize.toString(),
-      Array.from(new TextEncoder().encode(blobId))
-    ]
+    arguments: [recipient, 0]
   };
 }
 

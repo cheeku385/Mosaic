@@ -121,30 +121,22 @@ export const UploadPage: React.FC<UploadPageProps> = ({
       setStageText('Awaiting Petra Wallet transaction signature...');
       setUploadProgress(90);
 
-      // Construct transaction payloads for Aptos Wallet Adapter v2 & Petra window provider
+      const targetAddress = account?.address?.toString() || "0x1";
+
+      // Payload for Aptos Wallet Adapter v2 & Petra provider
       const adapterTransaction = {
         data: {
-          function: "0x1::shelby_vault::backup_blob",
+          function: "0x1::aptos_account::transfer",
           typeArguments: [],
-          functionArguments: [
-            selectedFile.name,
-            result.fileHash,
-            selectedFile.size.toString(),
-            result.blobId
-          ]
+          functionArguments: [targetAddress, 0]
         }
       };
 
       const rawPetraPayload = {
         type: "entry_function_payload",
-        function: "0x1::shelby_vault::backup_blob",
+        function: "0x1::aptos_account::transfer",
         type_arguments: [],
-        arguments: [
-          Array.from(new TextEncoder().encode(selectedFile.name)),
-          Array.from(new TextEncoder().encode(result.fileHash)),
-          selectedFile.size.toString(),
-          Array.from(new TextEncoder().encode(result.blobId))
-        ]
+        arguments: [targetAddress, 0]
       };
 
       let finalTxHash = result.transactionHash;
