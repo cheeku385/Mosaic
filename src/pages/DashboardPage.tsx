@@ -67,15 +67,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [autoSync, setAutoSync] = useState(true);
   const [copiedManifest, setCopiedManifest] = useState(false);
 
-  // Vaults State
-  const [vaultsList, setVaultsList] = useState([
-    { id: 'v1', name: 'Personal Deeds & Documents', size: '24.8 MB', fileCount: 8, locked: false, color: '#C05800' },
-    { id: 'v2', name: 'Family Archives Vault', size: '156 MB', fileCount: 14, locked: false, color: '#E27122' },
-    { id: 'v3', name: 'High Security Keys & Seed Vault', size: '4.2 KB', fileCount: 3, locked: true, color: '#FFB786' },
-    { id: 'v4', name: 'Research Papers & IP Storage', size: '45.1 MB', fileCount: 6, locked: false, color: '#713600' }
-  ]);
+  // Wallet Address derived for per-wallet data isolation
+  const walletAddress = account?.address?.toString().toLowerCase() || null;
+
+  // Vaults State - Per connected wallet address
+  const [vaultsList, setVaultsList] = useState<Array<{ id: string; name: string; size: string; fileCount: number; locked: boolean; color: string }>>([]);
   const [showCreateVaultModal, setShowCreateVaultModal] = useState(false);
   const [newVaultName, setNewVaultName] = useState('');
+
+  // Synchronize vaults for connected wallet
+  React.useEffect(() => {
+    if (walletAddress) {
+      const saved = localStorage.getItem(`mosaic_vaults_${walletAddress}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setVaultsList(Array.isArray(parsed) ? parsed : []);
+        } catch (e) {
+          setVaultsList([]);
+        }
+      } else {
+        setVaultsList([]);
+      }
+    } else {
+      setVaultsList([]);
+    }
+  }, [walletAddress]);
 
   const formatAddress = (addr?: string | null) => {
     if (!addr) return '0x71C...4e2';
@@ -112,23 +129,33 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   const handleCreateVault = () => {
     if (!newVaultName.trim()) return;
-    setVaultsList(prev => [
-      ...prev,
-      {
-        id: `v_${Date.now()}`,
-        name: newVaultName.trim(),
-        size: '0 KB',
-        fileCount: 0,
-        locked: false,
-        color: '#C05800'
+    const newVault = {
+      id: `v_${Date.now()}`,
+      name: newVaultName.trim(),
+      size: '0 KB',
+      fileCount: 0,
+      locked: false,
+      color: '#C05800'
+    };
+    setVaultsList(prev => {
+      const updated = [...prev, newVault];
+      if (walletAddress) {
+        localStorage.setItem(`mosaic_vaults_${walletAddress}`, JSON.stringify(updated));
       }
-    ]);
+      return updated;
+    });
     setNewVaultName('');
     setShowCreateVaultModal(false);
   };
 
   const toggleVaultLock = (id: string) => {
-    setVaultsList(prev => prev.map(v => v.id === id ? { ...v, locked: !v.locked } : v));
+    setVaultsList(prev => {
+      const updated = prev.map(v => v.id === id ? { ...v, locked: !v.locked } : v);
+      if (walletAddress) {
+        localStorage.setItem(`mosaic_vaults_${walletAddress}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
   };
 
   return (
@@ -396,14 +423,33 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         </div>
                       </div>
                     ))
+                  ) : files.length === 0 ? (
+                    <div className="p-12 text-center text-sm text-[#D9C2B5] space-y-4">
+                      <div className="w-12 h-12 rounded-xl bg-[#713600] flex items-center justify-center text-[#FFB786] mx-auto border border-[#C05800]/30">
+                        <FolderOpen className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-[#FDFBD4] font-display">No files uploaded yet</h3>
+                        <p className="text-xs text-[#D9C2B5] mt-1 max-w-sm mx-auto">
+                          Upload your first file to store it securely on the Shelby Network with your connected wallet.
+                        </p>
+                      </div>
+                      <button
+                        onClick={onOpenUpload}
+                        className="bg-[#C05800] text-[#FDFBD4] text-xs font-semibold px-4 py-2.5 rounded-lg hover:bg-[#A64C00] transition-all inline-flex items-center gap-2 shadow-md"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Document</span>
+                      </button>
+                    </div>
                   ) : (
                     <div className="p-12 text-center text-sm text-[#D9C2B5] space-y-3">
                       <p>No documents found matching "{searchQuery}"</p>
                       <button
-                        onClick={onOpenUpload}
+                        onClick={() => setSearchQuery('')}
                         className="text-xs text-[#FFB786] underline font-semibold hover:text-[#FDFBD4]"
                       >
-                        Upload a file to Shelby Network
+                        Clear Search
                       </button>
                     </div>
                   )}
@@ -522,7 +568,36 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
 
               {/* Content Render: List or Grid */}
-              {viewMode === 'list' ? (
+              {files.length === 0 ? (
+                <div className="bg-[#2E1C06] border border-[#C05800]/20 rounded-2xl p-12 text-center space-y-4 shadow-xl">
+                  <div className="w-12 h-12 rounded-xl bg-[#713600] flex items-center justify-center text-[#FFB786] mx-auto border border-[#C05800]/30">
+                    <FolderOpen className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-[#FDFBD4] font-display">No files uploaded yet</h3>
+                    <p className="text-xs text-[#D9C2B5] mt-1 max-w-sm mx-auto">
+                      There are no files associated with wallet {account?.address ? formatAddress(account.address.toString()) : 'connected'}. Upload your first document to store and view it here.
+                    </p>
+                  </div>
+                  <button
+                    onClick={onOpenUpload}
+                    className="bg-[#C05800] text-[#FDFBD4] text-xs font-semibold px-4 py-2.5 rounded-lg hover:bg-[#A64C00] transition-all inline-flex items-center gap-2 shadow-md"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Upload Document</span>
+                  </button>
+                </div>
+              ) : filteredFiles.length === 0 ? (
+                <div className="bg-[#2E1C06] border border-[#C05800]/20 rounded-2xl p-12 text-center space-y-3 shadow-xl">
+                  <p className="text-sm text-[#D9C2B5]">No documents found matching "{searchQuery}"</p>
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-xs text-[#FFB786] underline font-semibold hover:text-[#FDFBD4]"
+                  >
+                    Clear Search Filter
+                  </button>
+                </div>
+              ) : viewMode === 'list' ? (
                 <div className="bg-[#4A3216] rounded-2xl border border-[#53443A]/30 overflow-hidden shadow-2xl">
                   <div className="grid grid-cols-12 gap-4 p-4 border-b border-[#FDFBD4]/5 bg-[#3A260F] text-xs font-semibold text-[#D9C2B5] uppercase tracking-wider">
                     <div className="col-span-5 pl-2">NAME</div>
@@ -634,7 +709,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
 
               {/* Vault Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {vaultsList.length === 0 ? (
+                <div className="bg-[#2E1C06] border border-[#C05800]/20 rounded-2xl p-12 text-center space-y-4 shadow-xl">
+                  <div className="w-16 h-16 rounded-2xl bg-[#713600] flex items-center justify-center text-[#FFB786] mx-auto border border-[#C05800]/30">
+                    <Lock className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[#FDFBD4] font-display">No Vaults Created Yet</h3>
+                    <p className="text-xs text-[#D9C2B5] max-w-md mx-auto mt-1">
+                      Create an encrypted storage vault pool to group and isolate your documents on Aptos for wallet {account?.address ? formatAddress(account.address.toString()) : 'connected'}.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateVaultModal(true)}
+                    className="bg-[#C05800] text-[#FDFBD4] font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-xl hover:bg-[#A64C00] transition-all inline-flex items-center gap-2 shadow-lg"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Create New Vault</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {vaultsList.map((vault) => (
                   <div
                     key={vault.id}
@@ -686,6 +781,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 

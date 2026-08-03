@@ -10,6 +10,7 @@ export interface BackedUpFile {
   category?: 'encrypted' | 'sync' | 'immutable';
   rawType?: string;
   rawSizeNumber?: number;
+  ownerAddress?: string;
 }
 
 export type NavPage = 'landing' | 'dashboard' | 'upload' | 'all-files' | 'vaults' | 'settings';

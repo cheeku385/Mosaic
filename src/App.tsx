@@ -6,59 +6,35 @@ import { DashboardPage } from './pages/DashboardPage';
 import { UploadPage } from './pages/UploadPage';
 import { BackedUpFile, NavPage } from './types';
 
-// Default initial backed-up files matching Stitch Prompt 3 & Image 3
-const INITIAL_FILES: BackedUpFile[] = [
-  {
-    id: '1',
-    name: 'Q3_Financial_Report_Final.pdf',
-    type: 'PDF Document',
-    dateAdded: 'Oct 24, 2023',
-    size: '4.2 MB',
-    hash: '0x8f4d18...a3b9',
-    category: 'encrypted'
-  },
-  {
-    id: '2',
-    name: 'Brand_Assets_Pack_v2.zip',
-    type: 'Archive',
-    dateAdded: 'Oct 22, 2023',
-    size: '156 MB',
-    hash: '0x311400...c7d2',
-    category: 'sync'
-  },
-  {
-    id: '3',
-    name: 'wallet_seed_encrypted.key',
-    type: 'Key File',
-    dateAdded: 'Oct 15, 2023',
-    size: '2 KB',
-    hash: '0x713600...e9f1',
-    category: 'encrypted'
-  },
-  {
-    id: '4',
-    name: 'Client_Contracts_2023',
-    type: 'Directory',
-    dateAdded: 'Sep 30, 2023',
-    size: '--',
-    category: 'immutable'
-  }
-];
-
 function MainAppContent() {
-  const { connected } = useWallet();
+  const { account, connected } = useWallet();
+  const walletAddress = account?.address?.toString().toLowerCase() || null;
   const [currentPage, setCurrentPage] = useState<NavPage>('landing');
-  const [files, setFiles] = useState<BackedUpFile[]>(() => {
-    const saved = localStorage.getItem('mosaic_shelby_files');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return INITIAL_FILES;
+  const [files, setFiles] = useState<BackedUpFile[]>([]);
+
+  // Synchronize files for the connected wallet address
+  useEffect(() => {
+    if (walletAddress) {
+      const storageKey = `mosaic_shelby_files_${walletAddress}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setFiles(parsed);
+          } else {
+            setFiles([]);
+          }
+        } catch (e) {
+          setFiles([]);
+        }
+      } else {
+        setFiles([]);
       }
+    } else {
+      setFiles([]);
     }
-    return INITIAL_FILES;
-  });
+  }, [walletAddress]);
 
   // Automatically show dashboard when wallet connects
   useEffect(() => {
@@ -67,13 +43,18 @@ function MainAppContent() {
     }
   }, [connected]);
 
-  // Persist files in localStorage
-  useEffect(() => {
-    localStorage.setItem('mosaic_shelby_files', JSON.stringify(files));
-  }, [files]);
-
   const handleAddFile = (newFile: BackedUpFile) => {
-    setFiles(prev => [newFile, ...prev]);
+    const fileWithOwner: BackedUpFile = {
+      ...newFile,
+      ownerAddress: walletAddress || newFile.ownerAddress
+    };
+    setFiles(prev => {
+      const updated = [fileWithOwner, ...prev];
+      if (walletAddress) {
+        localStorage.setItem(`mosaic_shelby_files_${walletAddress}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
   };
 
   const handleDownloadFile = (file: BackedUpFile) => {
