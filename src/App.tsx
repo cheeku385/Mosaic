@@ -11,6 +11,22 @@ function MainAppContent() {
   const walletAddress = account?.address?.toString().toLowerCase() || null;
   const [currentPage, setCurrentPage] = useState<NavPage>('landing');
   const [files, setFiles] = useState<BackedUpFile[]>([]);
+  const [globalRegistry, setGlobalRegistry] = useState<BackedUpFile[]>([]);
+
+  // Synchronize global registry
+  useEffect(() => {
+    const savedGlobal = localStorage.getItem('mosaic_shelby_global_registry');
+    if (savedGlobal) {
+      try {
+        const parsed = JSON.parse(savedGlobal);
+        if (Array.isArray(parsed)) {
+          setGlobalRegistry(parsed);
+        }
+      } catch (e) {
+        setGlobalRegistry([]);
+      }
+    }
+  }, []);
 
   // Synchronize files for the connected wallet address
   useEffect(() => {
@@ -46,14 +62,46 @@ function MainAppContent() {
   const handleAddFile = (newFile: BackedUpFile) => {
     const fileWithOwner: BackedUpFile = {
       ...newFile,
-      ownerAddress: walletAddress || newFile.ownerAddress
+      ownerAddress: walletAddress || newFile.ownerAddress || '0x0',
+      visibility: newFile.visibility || (newFile.isPublic ? 'public' : 'private'),
+      isPublic: newFile.visibility === 'public' || !!newFile.isPublic
     };
+
+    // Update user's files
     setFiles(prev => {
       const updated = [fileWithOwner, ...prev];
       if (walletAddress) {
         localStorage.setItem(`mosaic_shelby_files_${walletAddress}`, JSON.stringify(updated));
       }
       return updated;
+    });
+
+    // Update global registry
+    setGlobalRegistry(prev => {
+      const filtered = prev.filter(f => f.id !== fileWithOwner.id);
+      const updatedGlobal = [fileWithOwner, ...filtered];
+      localStorage.setItem('mosaic_shelby_global_registry', JSON.stringify(updatedGlobal));
+      return updatedGlobal;
+    });
+  };
+
+  const handleUpdateFileVisibility = (fileId: string, newVisibility: 'public' | 'private') => {
+    const isPublic = newVisibility === 'public';
+    
+    // Update local user files
+    setFiles(prev => {
+      const updated = prev.map(f => f.id === fileId ? { ...f, visibility: newVisibility, isPublic } : f);
+      if (walletAddress) {
+        localStorage.setItem(`mosaic_shelby_files_${walletAddress}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    // Update global registry
+    setGlobalRegistry(prev => {
+      const updatedGlobal = prev.map(f => f.id === fileId ? { ...f, visibility: newVisibility, isPublic } : f);
+      localStorage.setItem('mosaic_shelby_global_registry', JSON.stringify(updatedGlobal));
+      return updatedGlobal;
     });
   };
 
@@ -80,6 +128,9 @@ function MainAppContent() {
     }
   };
 
+  // Derive public files for global gallery
+  const publicFiles = globalRegistry.filter(f => f.visibility === 'public' || f.isPublic);
+
   return (
     <div className="min-h-screen bg-[#201000] text-[#FDFBD4]">
       {currentPage === 'landing' && (
@@ -92,10 +143,13 @@ function MainAppContent() {
       {(currentPage === 'dashboard' || currentPage === 'all-files' || currentPage === 'vaults' || currentPage === 'settings') && (
         <DashboardPage
           files={files}
+          publicFiles={publicFiles}
+          globalRegistry={globalRegistry}
           activeTab={currentPage}
           onNavigate={(page) => setCurrentPage(page)}
           onDownloadFile={handleDownloadFile}
           onOpenUpload={() => setCurrentPage('upload')}
+          onUpdateFileVisibility={handleUpdateFileVisibility}
         />
       )}
 

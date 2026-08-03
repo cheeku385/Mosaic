@@ -12,7 +12,11 @@ import {
   Settings,
   HelpCircle,
   Radio,
-  FileCheck
+  FileCheck,
+  Globe,
+  Eye,
+  EyeOff,
+  Share2
 } from 'lucide-react';
 import { BackedUpFile, NavPage } from '../types';
 import { backupToShelbyProtocol, formatBytes } from '../lib/shelby';
@@ -39,6 +43,7 @@ export const UploadPage: React.FC<UploadPageProps> = ({
   const [isDone, setIsDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<'public' | 'private'>('private');
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -201,7 +206,10 @@ export const UploadPage: React.FC<UploadPageProps> = ({
         shelbyBlobId: result.blobId,
         dataUrl,
         rawType: selectedFile.type,
-        rawSizeNumber: selectedFile.size
+        rawSizeNumber: selectedFile.size,
+        visibility: visibility,
+        isPublic: visibility === 'public',
+        ownerAddress: account?.address?.toString().toLowerCase() || '0x0'
       };
 
       // Notify parent component & finish upload
@@ -356,6 +364,61 @@ export const UploadPage: React.FC<UploadPageProps> = ({
               <p className="text-xs text-[#D9C2B5]">
                 {selectedFile ? `${formatBytes(selectedFile.size)} • Click to replace` : "Supported: PDF, PNG, JPEG, Zip, Key (Max 50MB)"}
               </p>
+            </div>
+
+            {/* Visibility Selector */}
+            <div className="w-full bg-[#2E1C06] rounded-xl p-5 border border-[#53443A]/40 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[#FDFBD4] uppercase tracking-wider flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-[#FFB786]" />
+                  <span>Access & Visibility Setting</span>
+                </label>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                  visibility === 'public' 
+                    ? 'bg-green-950 text-green-400 border border-green-800' 
+                    : 'bg-amber-950 text-amber-400 border border-amber-800'
+                }`}>
+                  {visibility === 'public' ? '🔓 Public Access' : '🔒 Private (Wallet Only)'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setVisibility('private')}
+                  className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                    visibility === 'private'
+                      ? 'bg-[#4A3216] border-[#C05800] ring-2 ring-[#C05800]/50 shadow-md'
+                      : 'bg-[#201000] border-[#53443A]/30 hover:bg-[#3A260F]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-xs text-[#FDFBD4] mb-1.5">
+                    <Lock className="w-4 h-4 text-[#FFB786]" />
+                    <span>Private Upload</span>
+                  </div>
+                  <p className="text-[11px] text-[#D9C2B5] leading-relaxed">
+                    Only your connected wallet can view or download this file. Strictly hidden from all other users.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setVisibility('public')}
+                  className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                    visibility === 'public'
+                      ? 'bg-[#4A3216] border-[#C05800] ring-2 ring-[#C05800]/50 shadow-md'
+                      : 'bg-[#201000] border-[#53443A]/30 hover:bg-[#3A260F]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-xs text-[#FDFBD4] mb-1.5">
+                    <Globe className="w-4 h-4 text-green-400" />
+                    <span>Public Upload</span>
+                  </div>
+                  <p className="text-[11px] text-[#D9C2B5] leading-relaxed">
+                    Accessible via share link and listed in the Shelby Public Gallery for anyone to view & download.
+                  </p>
+                </button>
+              </div>
             </div>
 
             {/* File Info & Upload Progress Card matching Image 4 */}

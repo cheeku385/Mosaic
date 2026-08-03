@@ -11,6 +11,8 @@ export interface BackedUpFile {
   rawType?: string;
   rawSizeNumber?: number;
   ownerAddress?: string;
+  visibility?: 'public' | 'private';
+  isPublic?: boolean;
 }
 
 export type NavPage = 'landing' | 'dashboard' | 'upload' | 'all-files' | 'vaults' | 'settings';

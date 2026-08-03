@@ -32,7 +32,13 @@ import {
   ShieldAlert,
   Copy,
   CheckCircle2,
-  HardDrive
+  HardDrive,
+  Globe,
+  Share2,
+  Eye,
+  EyeOff,
+  Unlock,
+  Link
 } from 'lucide-react';
 import { BackedUpFile, NavPage } from '../types';
 import { MosaicLogo } from '../components/Logo';
@@ -40,26 +46,34 @@ import { WalletDropdown } from '../components/WalletDropdown';
 
 interface DashboardPageProps {
   files: BackedUpFile[];
+  publicFiles?: BackedUpFile[];
+  globalRegistry?: BackedUpFile[];
   activeTab?: NavPage;
   onNavigate: (page: NavPage) => void;
   onDownloadFile: (file: BackedUpFile) => void;
   onOpenUpload: () => void;
+  onUpdateFileVisibility?: (fileId: string, newVisibility: 'public' | 'private') => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   files,
+  publicFiles = [],
+  globalRegistry = [],
   activeTab = 'dashboard',
   onNavigate,
   onDownloadFile,
-  onOpenUpload
+  onOpenUpload,
+  onUpdateFileVisibility
 }) => {
   const { account, disconnect } = useWallet();
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fileCategoryFilter, setFileCategoryFilter] = useState<'all' | 'encrypted' | 'sync' | 'immutable'>('all');
+  const [galleryScope, setGalleryScope] = useState<'my-vault' | 'public-gallery'>('my-vault');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedFileDetail, setSelectedFileDetail] = useState<BackedUpFile | null>(null);
   const [copiedHash, setCopiedHash] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
 
   // Settings State
   const [network, setNetwork] = useState<'testnet' | 'mainnet'>('testnet');
@@ -69,6 +83,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   // Wallet Address derived for per-wallet data isolation
   const walletAddress = account?.address?.toString().toLowerCase() || null;
+
+  // Check URL search params for direct file sharing links
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const targetFileId = params.get('fileId') || params.get('file');
+    if (targetFileId) {
+      // Find in globalRegistry or user files or publicFiles
+      const found = globalRegistry.find(f => f.id === targetFileId) || 
+                    files.find(f => f.id === targetFileId) || 
+                    publicFiles.find(f => f.id === targetFileId);
+      if (found) {
+        setSelectedFileDetail(found);
+      }
+    }
+  }, [globalRegistry, files, publicFiles]);
 
   // Vaults State - Per connected wallet address
   const [vaultsList, setVaultsList] = useState<Array<{ id: string; name: string; size: string; fileCount: number; locked: boolean; color: string }>>([]);
@@ -100,8 +129,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     return `${str.substring(0, 6)}...${str.substring(str.length - 4)}`;
   };
 
+  // Source files based on selected scope (My Vault vs Public Gallery)
+  const activeSourceFiles = galleryScope === 'my-vault' ? files : publicFiles;
+
   // Filter files based on search query and category
-  const filteredFiles = files.filter(f => {
+  const filteredFiles = activeSourceFiles.filter(f => {
     const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           f.type.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
@@ -399,9 +431,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       >
                         <div className="col-span-5 flex items-center gap-3 pl-2 min-w-0">
                           {getFileIcon(file.type)}
-                          <span className="text-sm font-medium text-[#FDFBD4] truncate group-hover:text-[#FFB786] transition-colors">
-                            {file.name}
-                          </span>
+                          <div className="min-w-0 flex flex-col sm:flex-row sm:items-center gap-1.5">
+                            <span className="text-sm font-medium text-[#FDFBD4] truncate group-hover:text-[#FFB786] transition-colors">
+                              {file.name}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 w-fit ${
+                              file.visibility === 'public' || file.isPublic
+                                ? 'bg-green-950/80 text-green-400 border-green-800/80'
+                                : 'bg-amber-950/80 text-amber-300 border-amber-800/80'
+                            }`}>
+                              {file.visibility === 'public' || file.isPublic ? <Globe className="w-2.5 h-2.5 text-green-400" /> : <Lock className="w-2.5 h-2.5 text-amber-300" />}
+                              <span>{file.visibility === 'public' || file.isPublic ? 'Public' : 'Private'}</span>
+                            </span>
+                          </div>
                         </div>
                         <div className="col-span-3 md:col-span-2 text-xs text-[#D9C2B5] truncate">
                           {file.type}
@@ -500,7 +542,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     All Files Explorer
                   </h1>
                   <p className="text-sm text-[#D9C2B5]">
-                    Browse, filter, and verify your decentralized document vault.
+                    Browse, filter, and verify decentralized documents on Shelby Protocol.
                   </p>
                 </div>
 
@@ -545,10 +587,37 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
               </div>
 
+              {/* Scope Switcher: My Vault vs Public Shelby Gallery */}
+              <div className="flex p-1 bg-[#201000] rounded-xl border border-[#53443A]/40 w-fit">
+                <button
+                  onClick={() => setGalleryScope('my-vault')}
+                  className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                    galleryScope === 'my-vault'
+                      ? 'bg-[#C05800] text-[#FDFBD4] shadow-md'
+                      : 'text-[#D9C2B5] hover:text-[#FDFBD4]'
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-300" />
+                  <span>My Wallet Vault ({files.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setGalleryScope('public-gallery')}
+                  className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                    galleryScope === 'public-gallery'
+                      ? 'bg-[#C05800] text-[#FDFBD4] shadow-md'
+                      : 'text-[#D9C2B5] hover:text-[#FDFBD4]'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5 text-green-400" />
+                  <span>Public Shelby Gallery ({publicFiles.length})</span>
+                </button>
+              </div>
+
               {/* Category Pills */}
               <div className="flex gap-2 overflow-x-auto pb-2 border-b border-[#C05800]/15">
                 {[
-                  { id: 'all', label: `All Files (${files.length})` },
+                  { id: 'all', label: `All (${activeSourceFiles.length})` },
                   { id: 'encrypted', label: 'Encrypted Vault' },
                   { id: 'sync', label: 'Shelby Sync' },
                   { id: 'immutable', label: 'Immutable Ledgers' }
@@ -568,15 +637,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
 
               {/* Content Render: List or Grid */}
-              {files.length === 0 ? (
+              {activeSourceFiles.length === 0 ? (
                 <div className="bg-[#2E1C06] border border-[#C05800]/20 rounded-2xl p-12 text-center space-y-4 shadow-xl">
                   <div className="w-12 h-12 rounded-xl bg-[#713600] flex items-center justify-center text-[#FFB786] mx-auto border border-[#C05800]/30">
                     <FolderOpen className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-[#FDFBD4] font-display">No files uploaded yet</h3>
+                    <h3 className="text-base font-bold text-[#FDFBD4] font-display">
+                      {galleryScope === 'my-vault' ? 'No files uploaded yet' : 'No public files in protocol'}
+                    </h3>
                     <p className="text-xs text-[#D9C2B5] mt-1 max-w-sm mx-auto">
-                      There are no files associated with wallet {account?.address ? formatAddress(account.address.toString()) : 'connected'}. Upload your first document to store and view it here.
+                      {galleryScope === 'my-vault'
+                        ? `There are no files associated with wallet ${account?.address ? formatAddress(account.address.toString()) : 'connected'}. Upload your first document to store and view it here.`
+                        : 'No public files have been uploaded to the Shelby Protocol gallery yet. Upload a document as Public to share it here.'}
                     </p>
                   </div>
                   <button
@@ -601,86 +674,138 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 <div className="bg-[#4A3216] rounded-2xl border border-[#53443A]/30 overflow-hidden shadow-2xl">
                   <div className="grid grid-cols-12 gap-4 p-4 border-b border-[#FDFBD4]/5 bg-[#3A260F] text-xs font-semibold text-[#D9C2B5] uppercase tracking-wider">
                     <div className="col-span-5 pl-2">NAME</div>
-                    <div className="col-span-3">TYPE</div>
+                    <div className="col-span-3">TYPE & VISIBILITY</div>
                     <div className="col-span-2">SIZE</div>
                     <div className="col-span-2 text-center">ACTION</div>
                   </div>
 
                   <div className="flex flex-col divide-y divide-[#FDFBD4]/5">
-                    {filteredFiles.map((file) => (
-                      <div
-                        key={file.id}
-                        onClick={() => setSelectedFileDetail(file)}
-                        className="grid grid-cols-12 gap-4 p-4 items-center mosaic-glow group cursor-pointer transition-all"
-                      >
-                        <div className="col-span-5 flex items-center gap-3 pl-2 min-w-0">
-                          {getFileIcon(file.type)}
-                          <div className="min-w-0">
-                            <span className="text-sm font-semibold text-[#FDFBD4] block truncate group-hover:text-[#FFB786]">
-                              {file.name}
+                    {filteredFiles.map((file) => {
+                      const isPublic = file.visibility === 'public' || file.isPublic;
+                      const isOwner = !!(walletAddress && file.ownerAddress && walletAddress.toLowerCase() === file.ownerAddress.toLowerCase());
+                      const canAccess = isPublic || isOwner;
+
+                      return (
+                        <div
+                          key={file.id}
+                          onClick={() => setSelectedFileDetail(file)}
+                          className="grid grid-cols-12 gap-4 p-4 items-center mosaic-glow group cursor-pointer transition-all"
+                        >
+                          <div className="col-span-5 flex items-center gap-3 pl-2 min-w-0">
+                            {getFileIcon(file.type)}
+                            <div className="min-w-0">
+                              <span className="text-sm font-semibold text-[#FDFBD4] block truncate group-hover:text-[#FFB786]">
+                                {file.name}
+                              </span>
+                              <span className="text-[11px] text-[#D9C2B5]/70">Added {file.dateAdded}</span>
+                            </div>
+                          </div>
+
+                          <div className="col-span-3 flex items-center gap-2">
+                            <span className="text-xs text-[#D9C2B5] truncate">{file.type}</span>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                              isPublic
+                                ? 'bg-green-950/80 text-green-400 border-green-800/80'
+                                : 'bg-amber-950/80 text-amber-300 border-amber-800/80'
+                            }`}>
+                              {isPublic ? <Globe className="w-2.5 h-2.5 text-green-400" /> : <Lock className="w-2.5 h-2.5 text-amber-300" />}
+                              <span>{isPublic ? 'Public' : 'Private'}</span>
                             </span>
-                            <span className="text-[11px] text-[#D9C2B5]/70">Added {file.dateAdded}</span>
+                          </div>
+
+                          <div className="col-span-2 text-xs text-[#D9C2B5]">
+                            {file.size}
+                          </div>
+
+                          <div className="col-span-2 flex justify-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (canAccess) {
+                                  onDownloadFile(file);
+                                } else {
+                                  setSelectedFileDetail(file);
+                                }
+                              }}
+                              className={`p-2 border rounded-lg text-xs flex items-center gap-1 transition-all ${
+                                canAccess
+                                  ? 'bg-[#2E1C06] border-[#53443A]/40 text-[#FFB786] hover:bg-[#3A260F] hover:text-[#FDFBD4]'
+                                  : 'bg-red-950/40 border-red-800/40 text-red-300 hover:bg-red-900/60'
+                              }`}
+                              title={canAccess ? 'Download File' : 'Private File (Access Denied)'}
+                            >
+                              {canAccess ? <Download className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5 text-red-400" />}
+                              <span className="hidden sm:inline">{canAccess ? 'Download' : 'Private'}</span>
+                            </button>
                           </div>
                         </div>
-
-                        <div className="col-span-3 text-xs text-[#D9C2B5]">
-                          {file.type}
-                        </div>
-
-                        <div className="col-span-2 text-xs text-[#D9C2B5]">
-                          {file.size}
-                        </div>
-
-                        <div className="col-span-2 flex justify-center gap-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onDownloadFile(file); }}
-                            className="p-2 bg-[#2E1C06] border border-[#53443A]/40 rounded-lg text-[#FFB786] hover:bg-[#3A260F] hover:text-[#FDFBD4] text-xs flex items-center gap-1 transition-all"
-                            title="Download File"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Download</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  {filteredFiles.map((file) => (
-                    <div
-                      key={file.id}
-                      onClick={() => setSelectedFileDetail(file)}
-                      className="bg-[#2E1C06] border border-[#C05800]/20 rounded-2xl p-5 space-y-4 cursor-pointer hover:border-[#C05800] transition-all hover:shadow-xl group"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="w-12 h-12 rounded-xl bg-[#713600] flex items-center justify-center text-[#FFB786]">
-                          {getFileIcon(file.type)}
+                  {filteredFiles.map((file) => {
+                    const isPublic = file.visibility === 'public' || file.isPublic;
+                    const isOwner = !!(walletAddress && file.ownerAddress && walletAddress.toLowerCase() === file.ownerAddress.toLowerCase());
+                    const canAccess = isPublic || isOwner;
+
+                    return (
+                      <div
+                        key={file.id}
+                        onClick={() => setSelectedFileDetail(file)}
+                        className="bg-[#2E1C06] border border-[#C05800]/20 rounded-2xl p-5 space-y-4 cursor-pointer hover:border-[#C05800] transition-all hover:shadow-xl group relative overflow-hidden"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="w-12 h-12 rounded-xl bg-[#713600] flex items-center justify-center text-[#FFB786]">
+                            {getFileIcon(file.type)}
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="px-2.5 py-1 rounded-full bg-[#3A260F] text-[10px] text-[#FFB786] font-mono border border-[#53443A]/40">
+                              {file.size}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              isPublic
+                                ? 'bg-green-950/80 text-green-400 border-green-800/80'
+                                : 'bg-amber-950/80 text-amber-300 border-amber-800/80'
+                            }`}>
+                              {isPublic ? <Globe className="w-2.5 h-2.5 text-green-400" /> : <Lock className="w-2.5 h-2.5 text-amber-300" />}
+                              <span>{isPublic ? 'Public' : 'Private'}</span>
+                            </span>
+                          </div>
                         </div>
-                        <span className="px-2.5 py-1 rounded-full bg-[#3A260F] text-[10px] text-[#FFB786] font-mono border border-[#53443A]/40">
-                          {file.size}
-                        </span>
-                      </div>
 
-                      <div>
-                        <h3 className="font-bold text-sm text-[#FDFBD4] truncate group-hover:text-[#FFB786] transition-colors">
-                          {file.name}
-                        </h3>
-                        <p className="text-xs text-[#D9C2B5] mt-1">{file.type} • {file.dateAdded}</p>
-                      </div>
+                        <div>
+                          <h3 className="font-bold text-sm text-[#FDFBD4] truncate group-hover:text-[#FFB786] transition-colors">
+                            {file.name}
+                          </h3>
+                          <p className="text-xs text-[#D9C2B5] mt-1">{file.type} • {file.dateAdded}</p>
+                        </div>
 
-                      <div className="pt-2 border-t border-[#53443A]/20 flex justify-between items-center text-xs">
-                        <span className="text-[#D9C2B5]/70 font-mono text-[11px]">SHA-256 Verified</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onDownloadFile(file); }}
-                          className="text-[#FFB786] hover:text-[#FDFBD4] font-semibold flex items-center gap-1"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Download</span>
-                        </button>
+                        <div className="pt-2 border-t border-[#53443A]/20 flex justify-between items-center text-xs">
+                          <span className="text-[#D9C2B5]/70 font-mono text-[11px]">
+                            {isOwner ? 'Your File' : isPublic ? 'Public Shelby' : 'Private'}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (canAccess) {
+                                onDownloadFile(file);
+                              } else {
+                                setSelectedFileDetail(file);
+                              }
+                            }}
+                            className={`font-semibold flex items-center gap-1 ${
+                              canAccess ? 'text-[#FFB786] hover:text-[#FDFBD4]' : 'text-red-400 hover:text-red-300'
+                            }`}
+                          >
+                            {canAccess ? <Download className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                            <span>{canAccess ? 'Download' : 'Locked'}</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -899,67 +1024,160 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       </main>
 
       {/* File Details / Verification Modal */}
-      {selectedFileDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
-          <div className="bg-[#2E1C06] border border-[#C05800]/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-            <div className="flex justify-between items-start border-b border-[#53443A]/20 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#713600] flex items-center justify-center text-[#FFB786]">
-                  {getFileIcon(selectedFileDetail.type)}
+      {selectedFileDetail && (() => {
+        const isOwner = !!(walletAddress && selectedFileDetail.ownerAddress && walletAddress.toLowerCase() === selectedFileDetail.ownerAddress.toLowerCase());
+        const isPublic = selectedFileDetail.visibility === 'public' || selectedFileDetail.isPublic;
+        const canAccess = isPublic || isOwner;
+
+        if (!canAccess) {
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+              <div className="bg-[#2E1C06] border border-amber-700/60 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-6 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-amber-950/80 border border-amber-600/40 flex items-center justify-center mx-auto text-amber-400 shadow-xl">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold text-[#FDFBD4] font-display">Access Denied — Private File</h3>
+                  <p className="text-xs text-[#D9C2B5] leading-relaxed max-w-sm mx-auto">
+                    This document is marked as <span className="text-amber-400 font-bold">Private</span> by its owner. Access is restricted exclusively to the wallet address that uploaded it.
+                  </p>
+                </div>
+
+                <div className="bg-[#201000] p-4 rounded-xl border border-[#53443A]/40 text-left space-y-2 text-xs font-mono">
+                  <div>
+                    <span className="text-[#D9C2B5]/60 text-[10px] block">Owner Wallet</span>
+                    <span className="text-[#FFB786] font-bold break-all">
+                      {selectedFileDetail.ownerAddress ? formatAddress(selectedFileDetail.ownerAddress) : '0x71C...4e2'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#D9C2B5]/60 text-[10px] block">Your Connected Address</span>
+                    <span className="text-red-400 font-bold break-all">
+                      {walletAddress ? formatAddress(walletAddress) : 'No Wallet Connected'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedFileDetail(null)}
+                  className="w-full py-3 bg-[#713600] text-[#FDFBD4] hover:bg-[#C05800] rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg"
+                >
+                  Close & Go Back
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+            <div className="bg-[#2E1C06] border border-[#C05800]/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+              <div className="flex justify-between items-start border-b border-[#53443A]/20 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#713600] flex items-center justify-center text-[#FFB786]">
+                    {getFileIcon(selectedFileDetail.type)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-base text-[#FDFBD4] font-display">{selectedFileDetail.name}</h3>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        isPublic ? 'bg-green-950 text-green-400 border-green-800' : 'bg-amber-950 text-amber-300 border-amber-800'
+                      }`}>
+                        {isPublic ? '🔓 Public' : '🔒 Private'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#D9C2B5] mt-0.5">{selectedFileDetail.type} • {selectedFileDetail.size}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedFileDetail(null)}
+                  className="p-1 rounded-lg hover:bg-[#3A260F] text-[#D9C2B5]"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Visibility Toggle if Owner */}
+              {isOwner && onUpdateFileVisibility && (
+                <div className="bg-[#201000] p-3.5 rounded-xl border border-[#53443A]/40 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-[#FDFBD4]">Manage File Visibility</div>
+                    <div className="text-[11px] text-[#D9C2B5]">
+                      {isPublic ? 'Anyone with the link can view & download' : 'Only your wallet can view or access'}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      const nextVis = isPublic ? 'private' : 'public';
+                      onUpdateFileVisibility(selectedFileDetail.id, nextVis);
+                      setSelectedFileDetail({
+                        ...selectedFileDetail,
+                        visibility: nextVis,
+                        isPublic: nextVis === 'public'
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                      isPublic
+                        ? 'bg-amber-950/80 text-amber-300 border-amber-700/60 hover:bg-amber-900'
+                        : 'bg-green-950/80 text-green-400 border-green-700/60 hover:bg-green-900'
+                    }`}
+                  >
+                    {isPublic ? <Lock className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
+                    <span>{isPublic ? 'Make Private' : 'Make Public'}</span>
+                  </button>
+                </div>
+              )}
+
+              <div className="space-y-3 text-xs bg-[#201000] p-4 rounded-xl border border-[#53443A]/30 font-mono">
+                <div>
+                  <span className="text-[#D9C2B5]/60 block text-[10px]">SHA-256 Checksum</span>
+                  <span className="text-[#FFB786] break-all">{selectedFileDetail.hash || '0x8f4d183921...a3b9'}</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-[#FDFBD4] font-display">{selectedFileDetail.name}</h3>
-                  <p className="text-xs text-[#D9C2B5]">{selectedFileDetail.type} • {selectedFileDetail.size}</p>
+                  <span className="text-[#D9C2B5]/60 block text-[10px]">Shelby Blob ID</span>
+                  <span className="text-[#FDFBD4] break-all">{selectedFileDetail.shelbyBlobId || `shelby_blob_${selectedFileDetail.id}`}</span>
+                </div>
+                <div>
+                  <span className="text-[#D9C2B5]/60 block text-[10px]">Owner Wallet Address</span>
+                  <span className="text-[#D9C2B5] break-all">{selectedFileDetail.ownerAddress ? formatAddress(selectedFileDetail.ownerAddress) : '0x71C...4e2'}</span>
+                </div>
+                <div>
+                  <span className="text-[#D9C2B5]/60 block text-[10px]">Blockchain Status</span>
+                  <span className="text-green-400 font-bold">Anchored on Aptos Consensus</span>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedFileDetail(null)}
-                className="p-1 rounded-lg hover:bg-[#3A260F] text-[#D9C2B5]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="space-y-3 text-xs bg-[#201000] p-4 rounded-xl border border-[#53443A]/30 font-mono">
-              <div>
-                <span className="text-[#D9C2B5]/60 block text-[10px]">SHA-256 Checksum</span>
-                <span className="text-[#FFB786] break-all">{selectedFileDetail.hash || '0x8f4d183921...a3b9'}</span>
-              </div>
-              <div>
-                <span className="text-[#D9C2B5]/60 block text-[10px]">Shelby Blob ID</span>
-                <span className="text-[#FDFBD4] break-all">{selectedFileDetail.shelbyBlobId || `shelby_blob_${selectedFileDetail.id}`}</span>
-              </div>
-              <div>
-                <span className="text-[#D9C2B5]/60 block text-[10px]">Blockchain Status</span>
-                <span className="text-green-400 font-bold">Anchored on Aptos Consensus</span>
-              </div>
-            </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    const shareUrl = `${window.location.origin}${window.location.pathname}?fileId=${selectedFileDetail.id}`;
+                    navigator.clipboard.writeText(shareUrl);
+                    setCopiedShareLink(true);
+                    setTimeout(() => setCopiedShareLink(false), 2000);
+                  }}
+                  className="flex-1 py-3 bg-[#3A260F] border border-[#53443A] text-[#D9C2B5] hover:text-[#FDFBD4] rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5"
+                >
+                  {copiedShareLink ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
+                  <span>{copiedShareLink ? 'Link Copied!' : 'Copy Share Link'}</span>
+                </button>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => {
-                  handleCopyHash(selectedFileDetail.hash || '0x8f4d183921...a3b9');
-                }}
-                className="flex-1 py-3 bg-[#3A260F] border border-[#53443A] text-[#D9C2B5] hover:text-[#FDFBD4] rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5"
-              >
-                {copiedHash ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedHash ? 'Copied' : 'Copy Hash'}</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  onDownloadFile(selectedFileDetail);
-                  setSelectedFileDetail(null);
-                }}
-                className="flex-1 py-3 bg-[#C05800] text-[#FDFBD4] hover:bg-[#A64C00] rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg"
-              >
-                <Download className="w-4 h-4" />
-                <span>Decrypt & Download</span>
-              </button>
+                <button
+                  onClick={() => {
+                    onDownloadFile(selectedFileDetail);
+                    setSelectedFileDetail(null);
+                  }}
+                  className="flex-1 py-3 bg-[#C05800] text-[#FDFBD4] hover:bg-[#A64C00] rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Decrypt & Download</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Create Vault Modal */}
       {showCreateVaultModal && (
