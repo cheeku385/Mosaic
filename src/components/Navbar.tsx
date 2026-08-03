@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useWallet } from '@aptos-labs/wallet-adapter-react';
-import { Wallet, LogOut, ArrowRight, ExternalLink } from 'lucide-react';
+import { Wallet, ArrowRight, ExternalLink } from 'lucide-react';
 import { MosaicLogo } from './Logo';
+import { WalletDropdown } from './WalletDropdown';
 
 interface NavbarProps {
   onGoToDashboard?: () => void;
@@ -101,39 +102,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Wallet Connection / Status */}
           <div className="flex items-center gap-3">
-            {connected && account ? (
-              <div className="flex items-center gap-2">
-                <div className="px-3.5 py-1.5 rounded-full border border-[#C05800]/40 bg-[#2A1803] text-xs text-[#D9C2B5] flex items-center gap-2 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-[#E27122] animate-pulse"></span>
-                  {formatAddress(account.address?.toString())}
-                </div>
-
-                {currentView === 'landing' ? (
-                  <button
-                    onClick={onGoToDashboard}
-                    className="bg-[#C05800] text-[#FDFBD4] px-4 py-2 rounded-lg hover:bg-[#A64C00] font-semibold text-xs transition-all outer-glow-hover flex items-center gap-1.5 shadow-lg"
-                  >
-                    <span>Dashboard</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => disconnect()}
-                    title="Disconnect Wallet"
-                    className="p-2 rounded-lg bg-[#2E1C06] border border-[#C05800]/20 text-[#D9C2B5] hover:text-[#FDFBD4] hover:bg-[#4A3216] transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ) : (
+            <WalletDropdown />
+            {connected && currentView === 'landing' && (
               <button
-                onClick={handleConnectPetra}
-                disabled={connecting}
-                className="bg-[#C05800] text-[#FDFBD4] px-6 py-2.5 rounded-lg hover:bg-[#A64C00] font-semibold text-xs tracking-wider uppercase transition-all outer-glow-hover active:scale-95 flex items-center gap-2 shadow-[0_0_15px_rgba(192,88,0,0.3)]"
+                onClick={onGoToDashboard}
+                className="bg-[#C05800] text-[#FDFBD4] px-4 py-2 rounded-lg hover:bg-[#A64C00] font-semibold text-xs transition-all outer-glow-hover flex items-center gap-1.5 shadow-lg"
               >
-                <Wallet className="w-4 h-4" />
-                <span>{connecting ? "Connecting..." : "Connect Wallet"}</span>
+                <span>Dashboard</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
           </div>

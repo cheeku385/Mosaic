@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { BackedUpFile, NavPage } from '../types';
 import { MosaicLogo } from '../components/Logo';
+import { WalletDropdown } from '../components/WalletDropdown';
 
 interface DashboardPageProps {
   files: BackedUpFile[];
@@ -307,11 +308,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Wallet Address Pill */}
-              <div className="px-3.5 py-1.5 rounded-full border border-[#53443A]/60 bg-[#2E1C06] text-xs text-[#D9C2B5] flex items-center gap-2 font-mono">
-                <div className="w-2 h-2 rounded-full bg-[#E27122]"></div>
-                <span>{formatAddress(account?.address?.toString())}</span>
-              </div>
+              {/* Wallet Address Dropdown */}
+              <WalletDropdown />
 
               {/* Upload Button */}
               <button

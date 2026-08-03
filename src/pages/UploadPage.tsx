@@ -15,8 +15,9 @@ import {
   FileCheck
 } from 'lucide-react';
 import { BackedUpFile, NavPage } from '../types';
-import { backupToShelbyProtocol, formatBytes, createShelbyTransactionPayload } from '../lib/shelby';
+import { backupToShelbyProtocol, formatBytes } from '../lib/shelby';
 import { MosaicLogo } from '../components/Logo';
+import { WalletDropdown } from '../components/WalletDropdown';
 
 interface UploadPageProps {
   onFileBackedUp: (file: BackedUpFile) => void;
@@ -80,6 +81,15 @@ export const UploadPage: React.FC<UploadPageProps> = ({
     return `${str.substring(0, 6)}...${str.substring(str.length - 4)}`;
   };
 
+  const readFileAsDataURL = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleBackupToShelby = async () => {
     if (!selectedFile) {
       setError("Please select or drop a file to back up.");
@@ -88,9 +98,10 @@ export const UploadPage: React.FC<UploadPageProps> = ({
 
     setIsUploading(true);
     setError(null);
+    setIsDone(false);
 
     try {
-      // Auto-connect Petra wallet if not connected
+      // Step 0: Ensure Petra Wallet connection
       if (!connected) {
         setStageText('Connecting Petra Wallet...');
         try {
@@ -107,87 +118,111 @@ export const UploadPage: React.FC<UploadPageProps> = ({
       });
 
       // Step 2: Trigger real Aptos Petra wallet transaction request
-      let finalTxHash = result.transactionHash;
-
       setStageText('Awaiting Petra Wallet transaction signature...');
-      
-      const payload = createShelbyTransactionPayload(
-        selectedFile.name,
-        result.fileHash,
-        selectedFile.size,
-        result.blobId
-      );
+      setUploadProgress(90);
 
-      let txRes: any = null;
-      let petraError: any = null;
-
-      try {
-        if (signAndSubmitTransaction) {
-          // Attempt using Aptos Wallet Adapter
-          txRes = await signAndSubmitTransaction(payload as any);
-        } else if ((window as any).aptos?.signAndSubmitTransaction) {
-          txRes = await (window as any).aptos.signAndSubmitTransaction(payload);
-        } else if ((window as any).petra?.signAndSubmitTransaction) {
-          txRes = await (window as any).petra.signAndSubmitTransaction(payload);
+      // Construct transaction payloads for Aptos Wallet Adapter v2 & Petra window provider
+      const adapterTransaction = {
+        data: {
+          function: "0x1::shelby_vault::backup_blob",
+          typeArguments: [],
+          functionArguments: [
+            selectedFile.name,
+            result.fileHash,
+            selectedFile.size.toString(),
+            result.blobId
+          ]
         }
-      } catch (err: any) {
-        petraError = err;
-        console.warn("Petra wallet transaction attempt:", err);
-        // Fallback to window object direct call if wallet adapter wrapper failed
+      };
+
+      const rawPetraPayload = {
+        type: "entry_function_payload",
+        function: "0x1::shelby_vault::backup_blob",
+        type_arguments: [],
+        arguments: [
+          Array.from(new TextEncoder().encode(selectedFile.name)),
+          Array.from(new TextEncoder().encode(result.fileHash)),
+          selectedFile.size.toString(),
+          Array.from(new TextEncoder().encode(result.blobId))
+        ]
+      };
+
+      let finalTxHash = result.transactionHash;
+      let petraError: any = null;
+      let txSubmitted = false;
+
+      // 1. Try Aptos Wallet Adapter signAndSubmitTransaction
+      if (signAndSubmitTransaction) {
         try {
-          if ((window as any).aptos?.signAndSubmitTransaction) {
-            txRes = await (window as any).aptos.signAndSubmitTransaction(payload);
-          } else if ((window as any).petra?.signAndSubmitTransaction) {
-            txRes = await (window as any).petra.signAndSubmitTransaction(payload);
+          const res: any = await signAndSubmitTransaction(adapterTransaction as any);
+          if (res && (res.hash || res.transactionHash)) {
+            finalTxHash = res.hash || res.transactionHash;
+            txSubmitted = true;
           }
-        } catch (rawErr: any) {
-          petraError = rawErr;
+        } catch (err: any) {
+          petraError = err;
+          console.warn("Wallet adapter signAndSubmitTransaction error:", err);
         }
       }
 
-      if (txRes && (txRes.hash || txRes.transactionHash)) {
-        finalTxHash = txRes.hash || txRes.transactionHash;
-      } else if (petraError) {
-        // If user explicitly rejected or if Petra wallet threw error, handle gracefully
-        if (petraError?.message?.includes('User rejected') || petraError?.code === 4001) {
+      // 2. Fallback to direct window.aptos / window.petra provider if needed
+      if (!txSubmitted && (typeof window !== 'undefined')) {
+        const aptosWindow = (window as any).aptos || (window as any).petra;
+        if (aptosWindow?.signAndSubmitTransaction) {
+          try {
+            const res = await aptosWindow.signAndSubmitTransaction(rawPetraPayload);
+            if (res && (res.hash || res.transactionHash)) {
+              finalTxHash = res.hash || res.transactionHash;
+              txSubmitted = true;
+            }
+          } catch (winErr: any) {
+            petraError = winErr;
+            console.warn("Direct Petra window transaction error:", winErr);
+          }
+        }
+      }
+
+      // Check if user rejected in Petra
+      if (petraError) {
+        const errMsg = petraError?.message || String(petraError);
+        if (errMsg.toLowerCase().includes('reject') || petraError?.code === 4001) {
           throw new Error("Transaction signature was rejected in Petra Wallet.");
         }
       }
 
-      setTxHash(finalTxHash);
-      setIsDone(true);
-      setStageText('Successfully backed up to Shelby Protocol!');
+      // Read file data URL asynchronously
+      const dataUrl = await readFileAsDataURL(selectedFile);
 
       // Create new BackedUpFile entry
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-      // Read file data URL for local download/decryption capability
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const newFile: BackedUpFile = {
-          id: `file_${Date.now()}`,
-          name: selectedFile.name,
-          type: selectedFile.name.endsWith('.pdf') ? 'PDF Document' : 
-                selectedFile.name.endsWith('.zip') ? 'Archive' : 
-                selectedFile.name.endsWith('.key') ? 'Key File' : 'Document',
-          dateAdded: dateStr,
-          size: formatBytes(selectedFile.size),
-          hash: result.fileHash,
-          shelbyBlobId: result.blobId,
-          dataUrl,
-          rawType: selectedFile.type,
-          rawSizeNumber: selectedFile.size
-        };
-
-        onFileBackedUp(newFile);
+      const newFile: BackedUpFile = {
+        id: `file_${Date.now()}`,
+        name: selectedFile.name,
+        type: selectedFile.name.endsWith('.pdf') ? 'PDF Document' : 
+              selectedFile.name.endsWith('.zip') ? 'Archive' : 
+              selectedFile.name.endsWith('.key') ? 'Key File' : 'Document',
+        dateAdded: dateStr,
+        size: formatBytes(selectedFile.size),
+        hash: result.fileHash,
+        shelbyBlobId: result.blobId,
+        dataUrl,
+        rawType: selectedFile.type,
+        rawSizeNumber: selectedFile.size
       };
-      reader.readAsDataURL(selectedFile);
+
+      // Notify parent component & finish upload
+      onFileBackedUp(newFile);
+      setTxHash(finalTxHash);
+      setUploadProgress(100);
+      setIsDone(true);
+      setStageText('Successfully backed up to Shelby Protocol!');
 
     } catch (err: any) {
-      console.error(err);
+      console.error("Shelby backup error:", err);
       setError(err?.message || "Failed to complete transaction on Shelby Network.");
+      setStageText("Upload failed");
     } finally {
       setIsUploading(false);
     }
@@ -282,19 +317,7 @@ export const UploadPage: React.FC<UploadPageProps> = ({
           </button>
 
           <div className="flex items-center gap-3">
-            {connected ? (
-              <div className="px-3.5 py-1.5 rounded-full border border-[#53443A] bg-[#2E1C06] text-xs text-[#D9C2B5] flex items-center gap-2 font-mono">
-                <span className="w-2 h-2 rounded-full bg-[#E27122] animate-pulse"></span>
-                <span>{formatAddress(account?.address?.toString())}</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => connect("Petra")}
-                className="bg-[#C05800] text-[#FDFBD4] px-4 py-2 rounded-lg font-semibold text-xs hover:bg-[#A64C00] shadow-md transition-all"
-              >
-                Connect Wallet
-              </button>
-            )}
+            <WalletDropdown />
           </div>
         </header>
 
